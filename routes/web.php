@@ -10,6 +10,8 @@ use Illuminate\Support\Facades\Route;
 Route::get('/sitemap.xml', [SeoController::class, 'sitemap'])->name('sitemap');
 Route::get('/robots.txt', [SeoController::class, 'robots'])->name('robots');
 Route::get('/site.webmanifest', [SeoController::class, 'manifest'])->name('manifest');
+Route::get('/feed.xml', [SeoController::class, 'feed'])->name('feed');
+Route::get('/indexnow.txt', [SeoController::class, 'indexNowKey'])->name('indexnow.key');
 
 /* Public website */
 Route::controller(SiteController::class)->group(function () {

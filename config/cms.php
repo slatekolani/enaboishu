@@ -50,6 +50,7 @@ return [
 
         'Search engines (SEO)' => array_merge([
             $f('seo_indexing', 'Let search engines list the website', 'select', ['options' => ['Allow', 'Block'], 'default' => 'Allow', 'translate' => false, 'help' => 'Choose Block only while the website is being prepared; Google will then leave it out of its results.']),
+            $f('seo_auto_notify', 'Tell search engines automatically when something is published', 'select', ['options' => ['On', 'Off'], 'default' => 'On', 'translate' => false, 'help' => 'News, articles, events and pages are announced to search engines (IndexNow: Bing, Yandex and others) the moment they are published, edited or removed. Google picks them up from the sitemap and news feed. Works once the website is online.']),
             $f('seo_place', 'Location for search results', 'text', ['default' => 'Arusha, Tanzania', 'translate' => false, 'help' => 'Used in the information given to Google about the school.']),
             $f('google_verification', 'Google Search Console code (optional)', 'text', ['translate' => false, 'help' => 'From Google Search Console → Add property → HTML tag: paste only the content="…" value.']),
             $f('bing_verification', 'Bing Webmaster code (optional)', 'text', ['translate' => false, 'help' => 'From Bing Webmaster Tools → HTML meta tag: paste only the content="…" value.']),

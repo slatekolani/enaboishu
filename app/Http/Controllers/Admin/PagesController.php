@@ -33,6 +33,13 @@ class PagesController extends Controller
         return Inertia::render('Admin/Pages', [
             'builtIn' => $builtIn,
             'sharedBanner' => $en['page_banner'] ?? null,
+            'search' => $isAdmin ? [
+                'auto' => \App\Support\IndexNow::enabled(),
+                'blocked' => ! \App\Support\Meta::indexingAllowed(),
+                'last' => json_decode((string) \App\Models\Setting::where('key', 'indexnow_last')->value('value'), true),
+                'sitemap' => route('sitemap'),
+                'feed' => route('feed'),
+            ] : null,
             'custom' => Page::orderBy('sort')->orderBy('id')->get(['id', 'title', 'slug', 'menu_group', 'image', 'active', 'updated_at'])
                 ->map(fn ($p) => $p->only(['id', 'title', 'slug', 'menu_group', 'image', 'active']) + ['url' => route('pages.show', $p->slug)]),
         ]);

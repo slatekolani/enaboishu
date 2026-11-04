@@ -23,6 +23,9 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         // Every page gets link-preview tags; controllers can pass more specific ones.
+        // Tell search engines as soon as news, articles, events or pages are published, changed or removed.
+        \App\Support\IndexNow::watch();
+
         View::composer('app', function ($view) {
             if (! array_key_exists('meta', $view->getData())) {
                 $view->with('meta', Meta::make());

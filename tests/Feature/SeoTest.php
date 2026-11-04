@@ -6,6 +6,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
+    \App\Support\Site::forget(); // settings cached by an earlier test must not leak into this one
     $this->seed([\Database\Seeders\RolesSeeder::class]);
 });
 
@@ -114,4 +115,95 @@ it('previews the home page link with the school logo, even when the slides have 
         ->not->toContain('og:image" content="'.url('/uploads/demo/slide-1'));
     [$width, $height] = getimagesize(public_path('images/share-logo.jpg'));
     expect([$width, $height])->toBe([1200, 630]);
+});
+
+/* ---------- Telling search engines about new content ---------- */
+
+function onlineSite(): User
+{
+    config(['app.url' => 'https://enaboishusecondaryschool.ac.tz']);
+    \Illuminate\Support\Facades\URL::forceRootUrl('https://enaboishusecondaryschool.ac.tz');
+    \Illuminate\Support\Facades\Http::fake(['api.indexnow.org/*' => \Illuminate\Support\Facades\Http::response('', 202)]);
+    $admin = User::factory()->create();
+    $admin->assignRole('admin');
+
+    return $admin;
+}
+
+it('tells search engines the moment a news story is published, with the list page and home page', function () {
+    $admin = onlineSite();
+
+    $this->actingAs($admin)->post('/admin/content/posts', ['title' => 'Science fair winners', 'published_at' => now()->toDateString(), 'active' => '1'])->assertRedirect();
+
+    \Illuminate\Support\Facades\Http::assertSentCount(1);
+    \Illuminate\Support\Facades\Http::assertSent(fn ($r) => $r->url() === \App\Support\IndexNow::ENDPOINT
+        && $r['host'] === 'enaboishusecondaryschool.ac.tz'
+        && $r['key'] === Setting::where('key', 'indexnow_key')->value('value')
+        && $r['keyLocation'] === 'https://enaboishusecondaryschool.ac.tz/indexnow.txt'
+        && $r['urlList'] === ['https://enaboishusecondaryschool.ac.tz/news/science-fair-winners', 'https://enaboishusecondaryschool.ac.tz/news', 'https://enaboishusecondaryschool.ac.tz']);
+    expect(json_decode(Setting::where('key', 'indexnow_last')->value('value'), true))->toMatchArray(['ok' => true, 'count' => 3]);
+
+    // The key file search engines check
+    $this->get('/indexnow.txt')->assertOk()->assertSee(Setting::where('key', 'indexnow_key')->value('value'));
+});
+
+it('announces events, articles and pages too, and removals, but not hidden drafts or future stories', function () {
+    $admin = onlineSite();
+
+    $this->actingAs($admin)->post('/admin/content/posts', ['title' => 'Draft', 'published_at' => now()->toDateString()]); // not published
+    $this->actingAs($admin)->post('/admin/content/posts', ['title' => 'Next month', 'published_at' => now()->addMonth()->toDateString(), 'active' => '1']);
+    \Illuminate\Support\Facades\Http::assertNothingSent();
+
+    $event = Event::create(['title' => 'Prize giving', 'slug' => 'prize-giving', 'starts_at' => now()->addWeek()->toDateString(), 'active' => true]);
+    app(\Illuminate\Support\Defer\DeferredCallbackCollection::class)->invoke();
+    \Illuminate\Support\Facades\Http::assertSent(fn ($r) => in_array('https://enaboishusecondaryschool.ac.tz/events/prize-giving', $r['urlList'], true));
+
+    $event->delete();
+    app(\Illuminate\Support\Defer\DeferredCallbackCollection::class)->invoke();
+    \Illuminate\Support\Facades\Http::assertSentCount(2);
+});
+
+it('stays quiet while the site runs on this computer, or when the school turns it off', function () {
+    \Illuminate\Support\Facades\Http::fake();
+    Post::create(['title' => 'Local', 'slug' => 'local', 'published_at' => now(), 'active' => true]);
+    app(\Illuminate\Support\Defer\DeferredCallbackCollection::class)->invoke();
+    \Illuminate\Support\Facades\Http::assertNothingSent();
+
+    onlineSite();
+    Setting::create(['key' => 'seo_auto_notify', 'value' => 'Off']);
+    \App\Support\Site::forget();
+    Post::create(['title' => 'Off', 'slug' => 'off', 'published_at' => now(), 'active' => true]);
+    app(\Illuminate\Support\Defer\DeferredCallbackCollection::class)->invoke();
+    \Illuminate\Support\Facades\Http::assertNothingSent();
+});
+
+it('dates every section in the sitemap by its newest content and lists the photos', function () {
+    Post::create(['title' => 'Old', 'slug' => 'old', 'published_at' => now()->subYear(), 'active' => true, 'image' => 'images/old.jpg']);
+    $this->travel(1)->days();
+    Post::create(['title' => 'New', 'slug' => 'new', 'published_at' => now(), 'active' => true]);
+
+    $xml = simplexml_load_string($this->get('/sitemap.xml')->getContent());
+    $xml->registerXPathNamespace('s', 'http://www.sitemaps.org/schemas/sitemap/0.9');
+    $xml->registerXPathNamespace('image', 'http://www.google.com/schemas/sitemap-image/1.1');
+    $lastmod = fn (string $url) => (string) $xml->xpath("//s:url[s:loc='{$url}']/s:lastmod")[0];
+
+    expect(substr($lastmod(url('/news')), 0, 10))->toBe(now()->toDateString())
+        ->and(substr($lastmod(url('/')), 0, 10))->toBe(now()->toDateString())
+        ->and((string) $xml->xpath("//s:url[s:loc='".url('/news/old')."']/image:image/image:loc")[0])->toBe(url('/uploads/images/old.jpg'));
+});
+
+it('publishes a news feed of the latest stories, articles and events', function () {
+    Post::create(['title' => 'Form One orientation', 'slug' => 'orientation', 'excerpt' => '<p>Welcome week</p>', 'published_at' => now()->subDay(), 'active' => true]);
+    \App\Models\Article::create(['title' => 'Reading at home', 'slug' => 'reading', 'author' => 'Mr. Mollel', 'published_at' => now(), 'active' => true]);
+    Post::create(['title' => 'Hidden', 'slug' => 'hidden', 'published_at' => now(), 'active' => false]);
+
+    $response = $this->get('/feed.xml')->assertOk()->assertHeader('Content-Type', 'application/rss+xml; charset=UTF-8');
+    $rss = simplexml_load_string($response->getContent());
+
+    expect((string) $rss->channel->item[0]->title)->toBe('Reading at home')
+        ->and((string) $rss->channel->item[1]->link)->toBe(url('/news/orientation'))
+        ->and((string) $rss->channel->item[1]->description)->toBe('Welcome week')
+        ->and($response->getContent())->not->toContain('/news/hidden');
+    expect($this->get('/robots.txt')->getContent())->toContain('Sitemap: '.url('/feed.xml'));
+    expect($this->get('/')->getContent())->toContain('type="application/rss+xml"');
 });

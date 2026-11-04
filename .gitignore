@@ -17,3 +17,7 @@ yarn-error.log
 /.fleet
 /.idea
 /.vscode
+
+# Local database dumps and .env copies: never upload
+/storage/backups
+.DS_Store

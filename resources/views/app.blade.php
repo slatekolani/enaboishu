@@ -47,6 +47,7 @@
         <link rel="icon" type="image/png" sizes="16x16" href="{{ $meta['icons']['favicon-16x16.png'] }}">
         <link rel="apple-touch-icon" sizes="180x180" href="{{ $meta['icons']['apple-touch-icon.png'] }}">
         <link rel="manifest" href="{{ route('manifest') }}">
+        <link rel="alternate" type="application/rss+xml" title="{{ $meta['site_name'] }} — news, articles and events" href="{{ route('feed') }}">
         <meta name="theme-color" content="{{ $meta['theme'] }}">
         <meta name="application-name" content="{{ $meta['site_name'] }}">
         <meta name="apple-mobile-web-app-title" content="{{ $meta['site_name'] }}">

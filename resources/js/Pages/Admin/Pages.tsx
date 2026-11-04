@@ -19,9 +19,35 @@ function Thumb({ src, fallback, home }: { src: string | null; fallback: string |
     );
 }
 
-export default function Pages({ builtIn, sharedBanner, custom }: { builtIn: BuiltIn[]; sharedBanner: string | null; custom: Custom[] }) {
+interface Search { auto: boolean; blocked: boolean; last: { at: string; count: number; ok: boolean; status: number } | null; sitemap: string; feed: string }
+
+/** Whether new content is reaching search engines, in one line. */
+function SearchStatus({ s }: { s: Search }) {
+    const when = s.last && new Date(s.last.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    const [tone, text] = s.blocked
+        ? ['border-amber-300 bg-amber-50 text-amber-900', 'Search engines are blocked (Site settings → Search engines). Nothing is listed on Google while this is set.']
+        : !s.auto
+          ? ['border-slate-200 bg-white text-slate-600', 'Automatic notifications are off or the site is not online yet. Google still finds new content through the sitemap and news feed.']
+          : s.last
+            ? s.last.ok
+                ? ['border-emerald-200 bg-emerald-50 text-emerald-900', `Search engines last notified ${when}: ${s.last.count} ${s.last.count === 1 ? 'address' : 'addresses'}, accepted.`]
+                : ['border-red-200 bg-red-50 text-red-900', `Last notification on ${when} was not accepted (answer ${s.last.status || 'no connection'}). It is retried with the next change.`]
+            : ['border-slate-200 bg-white text-slate-600', 'Search engines are notified automatically the next time you publish, edit or remove news, an article, an event or a page.'];
+    return (
+        <div className={`mb-8 flex flex-wrap items-center justify-between gap-3 border px-5 py-3 text-sm ${tone}`}>
+            <span><span className="font-semibold">Google &amp; search engines · </span>{text}</span>
+            <span className="flex gap-4 font-medium">
+                <a href={s.sitemap} target="_blank" rel="noreferrer" className="underline">sitemap.xml ↗</a>
+                <a href={s.feed} target="_blank" rel="noreferrer" className="underline">feed.xml ↗</a>
+            </span>
+        </div>
+    );
+}
+
+export default function Pages({ builtIn, sharedBanner, custom, search }: { builtIn: BuiltIn[]; sharedBanner: string | null; custom: Custom[]; search: Search | null }) {
     return (
         <AdminLayout title="Pages" actions={<Link href={route('admin.resource.create', 'pages')} className="btn-primary !py-2">Create a new page</Link>}>
+            {search && <SearchStatus s={search} />}
             {builtIn.length > 0 && (
                 <section className="mb-12">
                     <h2 className="font-sans text-base font-semibold text-slate-900">Website pages</h2>
