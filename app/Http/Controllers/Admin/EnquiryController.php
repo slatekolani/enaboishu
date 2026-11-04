@@ -32,7 +32,9 @@ class EnquiryController extends Controller
             'enquiries' => $enquiries,
             'statuses' => Enquiry::STATUSES,
             'counts' => Enquiry::selectRaw('status, count(*) as total')->groupBy('status')->pluck('total', 'status'),
-            'filters' => ['status' => $status, 'q' => $search, 'open' => (int) $request->query('open')],
+            // ?enquiry=12 opens that enquiry. (Not "?open=": some hosting firewalls block that word.)
+            'filters' => ['status' => $status, 'q' => $search, 'enquiry' => (int) $request->query('enquiry')],
+            'opened' => $request->integer('enquiry') ? Enquiry::find($request->integer('enquiry')) : null,
         ]);
     }
 
@@ -64,7 +66,11 @@ class EnquiryController extends Controller
         Audit::log("Deleted enquiry {$enquiry->reference} ({$enquiry->student_name})", null, [], 'deleted');
         $enquiry->delete();
 
-        return redirect()->route('admin.enquiries')->with('success', 'Enquiry deleted.');
+        // Back to where the delete was clicked (the dashboard or the enquiries list), without the deleted one open.
+        $previous = url()->previous();
+        $to = str_contains($previous, '/admin/enquiries') ? route('admin.enquiries') : $previous;
+
+        return redirect()->to($to)->with('success', 'Enquiry deleted.');
     }
 
     /** All enquiries (or one status) as a spreadsheet file (CSV, opens in Excel). */

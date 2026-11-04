@@ -353,7 +353,7 @@ class SiteController extends Controller
                 'Home area' => $enquiry->address,
                 'Message' => $enquiry->message,
             ],
-            'admin_url' => route('admin.enquiries', ['open' => $enquiry->id]),
+            'admin_url' => route('admin.enquiries', ['enquiry' => $enquiry->id]),
         ]);
 
         return redirect()->route('apply')->with('enquiry_reference', $enquiry->reference);

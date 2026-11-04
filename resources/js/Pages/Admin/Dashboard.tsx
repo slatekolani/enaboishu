@@ -1,7 +1,11 @@
-import { ReactNode } from 'react';
-import { Link } from '@inertiajs/react';
+import { ReactNode, useCallback, useState } from 'react';
+import { Link, router } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
+import { EnquiryDetail, SidePanel, type Enquiry } from '@/Components/admin/EnquiryDetail';
+import { confirmDanger } from '@/lib/alerts';
 import { cn } from '@/lib/utils';
+
+interface Msg { id: number; name: string; email: string; phone: string | null; subject: string | null; body: string; created_at: string; read_at: string | null }
 
 interface Figure { label: string; value: number; url: string; note: string }
 interface Item { key: string; label: string; count: number; updated: string | null; url: string; create: string }
@@ -12,8 +16,9 @@ interface Props {
     figures: Figure[];
     trend: { label: string; count: number }[];
     statuses: { status: string; count: number }[];
-    enquiries: { id: number; reference: string; student_name: string; class_applying: string | null; status: string; created_at: string }[];
-    messages: { id: number; name: string; subject: string | null; created_at: string; read_at: string | null }[];
+    enquiries: Enquiry[];
+    statusList: string[];
+    messages: Msg[];
     events: { id: number; title: string; starts_at: string; location: string | null }[];
     activity: { id: number; who: string; event: string | null; description: string; area: string | null; at: string }[];
     groups: { group: string; items: Item[] }[];
@@ -110,7 +115,50 @@ function Statuses({ statuses, className }: { statuses: Props['statuses']; classN
 
 const ACTION_WORD: Record<string, string> = { created: 'added', updated: 'edited', deleted: 'deleted' };
 
+/** A message opened from the dashboard: read it, reply, mark it as read or delete it, without leaving the page. */
+function MessageDetail({ m, onClose }: { m: Msg; onClose: () => void }) {
+    const subject = m.subject ? `Re: ${m.subject}` : 'Your message to the school';
+    const phone = m.phone?.replace(/[^\d+]/g, '') ?? '';
+    return (
+        <aside className="min-h-full bg-white">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-4">
+                <div className="min-w-0">
+                    <p className="text-sm text-slate-500">Message · {new Date(m.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                    <h2 className="font-sans text-xl font-semibold text-slate-900">{m.subject || 'No subject'}</h2>
+                    <p className="mt-0.5 text-sm text-slate-600">{m.name} · <a href={`mailto:${m.email}`} className="text-navy-800 hover:underline">{m.email}</a>{m.phone ? ` · ${m.phone}` : ''}</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-4 text-sm">
+                    <Link href={route('admin.messages')} className="font-medium text-navy-800 hover:underline">Inbox</Link>
+                    <button onClick={onClose} className="text-slate-500 hover:underline">Close</button>
+                </div>
+            </div>
+            <p className="whitespace-pre-line px-6 py-5 text-[15px] leading-relaxed text-slate-800">{m.body}</p>
+            <div className="flex flex-wrap gap-2 border-t border-slate-200 px-6 py-4">
+                <a href={`mailto:${m.email}?subject=${encodeURIComponent(subject)}`} className="btn-primary !px-4 !py-2">Reply by email</a>
+                {phone && <a href={`tel:${phone}`} className="btn-outline !px-4 !py-2">Call</a>}
+                {!m.read_at && (
+                    <button onClick={() => router.patch(route('admin.messages.read', m.id), {}, { preserveScroll: true })} className="btn-outline !px-4 !py-2">Mark as read</button>
+                )}
+            </div>
+            <div className="px-6 pb-6">
+                <button
+                    onClick={async () => (await confirmDanger({ title: 'Delete this message?', text: `The message from ${m.name} will be deleted permanently.` })) && router.delete(route('admin.messages.destroy', m.id), { preserveScroll: true, onSuccess: onClose })}
+                    className="text-sm text-red-700 hover:underline"
+                >
+                    Delete
+                </button>
+            </div>
+        </aside>
+    );
+}
+
 export default function Dashboard(p: Props) {
+    // The enquiry or message opened in the side panel. Looked up in the latest props, so the panel shows saved changes.
+    const [opened, setOpened] = useState<{ type: 'enquiry' | 'message'; id: number } | null>(null);
+    const close = useCallback(() => setOpened(null), []);
+    const enquiry = opened?.type === 'enquiry' ? p.enquiries.find((e) => e.id === opened.id) : undefined;
+    const message = opened?.type === 'message' ? p.messages.find((m) => m.id === opened.id) : undefined;
+
     const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const quick = [
         { label: 'Add news', href: route('admin.resource.create', 'posts') },
@@ -170,13 +218,13 @@ export default function Dashboard(p: Props) {
                             <ul className="divide-y divide-slate-100">
                                 {p.enquiries.map((e) => (
                                     <li key={e.id}>
-                                        <Link href={route('admin.enquiries', { open: e.id })} className="flex items-center gap-4 px-5 py-3 hover:bg-slate-50">
+                                        <button type="button" onClick={() => setOpened({ type: 'enquiry', id: e.id })} className="flex w-full items-center gap-4 px-5 py-3 text-left hover:bg-slate-50">
                                             <div className="min-w-0 flex-1">
                                                 <p className={cn('truncate text-[14.5px]', e.status === 'New' ? 'font-semibold text-slate-900' : 'text-slate-700')}>{e.student_name}</p>
                                                 <p className="truncate text-[12.5px] text-slate-500"><span className="font-mono">{e.reference}</span>{e.class_applying ? ` · ${e.class_applying}` : ''} · {ago(e.created_at)}</p>
                                             </div>
                                             <span className={cn('shrink-0 px-2 py-0.5 text-[11.5px] font-semibold', STATUS_TONE[e.status] ?? 'bg-slate-100 text-slate-600')}>{e.status}</span>
-                                        </Link>
+                                        </button>
                                     </li>
                                 ))}
                             </ul>
@@ -187,14 +235,14 @@ export default function Dashboard(p: Props) {
                             <ul className="divide-y divide-slate-100">
                                 {p.messages.map((m) => (
                                     <li key={m.id}>
-                                        <Link href={route('admin.messages')} className="flex items-center gap-4 px-5 py-3 hover:bg-slate-50">
+                                        <button type="button" onClick={() => setOpened({ type: 'message', id: m.id })} className="flex w-full items-center gap-4 px-5 py-3 text-left hover:bg-slate-50">
                                             <span aria-hidden className={cn('h-2 w-2 shrink-0 rounded-full', m.read_at ? 'bg-transparent' : 'bg-brass')} />
                                             <div className="min-w-0 flex-1">
                                                 <p className={cn('truncate text-[14.5px]', m.read_at ? 'text-slate-700' : 'font-semibold text-slate-900')}>{m.name}</p>
                                                 <p className="truncate text-[12.5px] text-slate-500">{m.subject || 'No subject'}</p>
                                             </div>
                                             <span className="shrink-0 text-[12.5px] text-slate-400">{ago(m.created_at)}</span>
-                                        </Link>
+                                        </button>
                                     </li>
                                 ))}
                             </ul>
@@ -273,6 +321,16 @@ export default function Dashboard(p: Props) {
                     ))}
                 </div>
             </section>
+            {enquiry && (
+                <SidePanel label={`Enquiry ${enquiry.reference}`} onClose={close}>
+                    <EnquiryDetail key={enquiry.id + enquiry.status + (enquiry.notes ?? '')} e={enquiry} statuses={p.statusList} onClose={close} fullPageLink />
+                </SidePanel>
+            )}
+            {message && (
+                <SidePanel label={`Message from ${message.name}`} onClose={close}>
+                    <MessageDetail m={message} onClose={close} />
+                </SidePanel>
+            )}
         </AdminLayout>
     );
 }
