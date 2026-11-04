@@ -4,6 +4,7 @@
     "scripts": {
         "dev": "vite",
         "build": "tsc && vite build",
+        "build:zip": "npm run build && cd public && rm -f build.zip && zip -rqX build.zip build -x '*.DS_Store'",
         "typecheck": "tsc --noEmit",
         "lint": "eslint resources/js --ext .ts,.tsx",
         "format": "prettier --write resources/js"
