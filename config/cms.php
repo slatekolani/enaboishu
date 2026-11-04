@@ -26,6 +26,10 @@ $seo = fn () => [
     $f('seo_description', 'Search engines — description (optional)', 'textarea', ['translate' => true, 'rules' => 'nullable|string|max:320', 'help' => 'The two lines under the headline in Google. Leave empty to use the summary. Aim for 140–160 characters.']),
 ];
 
+// The item's web address (the last part of its URL). Filled in from the title; can be changed.
+$slug = fn () => $f('slug', 'Web address (URL)', 'slug', ['translate' => false, 'rules' => 'nullable|string|max:160',
+    'help' => 'Made from the title automatically. Use short, plain words, e.g. form-four-results-2026. If you change it, the old address keeps working and sends visitors (and Google) to the new one. Clear it to make it again from the title.']);
+
 // The built-in pages that get their own search-engine title and description.
 $seoPages = ['home' => 'Home page', 'about' => 'About us', 'academics' => 'Academics', 'results' => 'Academic results', 'downloads' => 'Downloads',
     'admissions' => 'Admissions', 'apply' => 'Apply online', 'staff' => 'Our staff', 'student-life' => 'Student life', 'alumni' => 'Alumni',
@@ -480,10 +484,11 @@ return [
             'label' => 'Pages', 'singular' => 'page', 'model' => \App\Models\Page::class, 'editor' => true, 'index_route' => 'admin.pages',
             'description' => 'Create extra pages yourself (e.g. School fees, Uniform, School rules, Boarding). Choose the menu they appear under; they also appear in the footer.',
             'order' => ['sort', 'asc'],
-            'slug_from' => 'title',
+            'slug_from' => 'title', 'public_route' => 'pages.show',
             'columns' => [['image', 'Banner', 'image'], ['title', 'Title'], ['menu_group', 'Menu'], ['active', 'Published', 'bool']],
             'fields' => [
                 $f('title', 'Page title', 'text', ['rules' => 'required|string|max:120', 'translate' => true]),
+                $slug(),
                 $f('menu_group', 'Show in the menu under', 'select', ['options' => \App\Models\Page::MENU_GROUPS, 'rules' => 'required|string|max:40', 'default' => 'About', 'help' => 'Choose "Not in the menu" for a page you will link to yourself (from a notice, a slide button or another page).']),
                 $f('intro', 'Text under the title (banner)', 'textarea', ['rules' => 'nullable|string|max:300', 'translate' => true]),
                 $f('image', 'Banner photo', 'image', ['help' => 'Optional. Wide photo behind the title; the shared banner photo is used if empty.']),
@@ -709,10 +714,11 @@ return [
             'label' => 'News', 'singular' => 'news story', 'model' => \App\Models\Post::class, 'editor' => true,
             'description' => 'School announcements and news stories. The newest appear on the home page.',
             'order' => ['published_at', 'desc'],
-            'slug_from' => 'title',
+            'slug_from' => 'title', 'public_route' => 'news.show',
             'columns' => [['image', 'Cover', 'image'], ['title', 'Title'], ['published_at', 'Date', 'date'], ['photos', 'Photos', 'count'], ['active', 'Published', 'bool']],
             'fields' => [
                 $f('title', 'Headline', 'text', ['translate' => true, 'rules' => 'required|string|max:160']),
+                $slug(),
                 $f('published_at', 'Publication date', 'date', ['rules' => 'required|date', 'default' => 'today', 'help' => 'Stories dated in the future stay hidden until that day.']),
                 $f('excerpt', 'Summary', 'textarea', ['translate' => true, 'rules' => 'nullable|string|max:400', 'help' => 'One or two sentences shown on the home page and news list.']),
                 $f('body', 'Story', 'richtext', ['translate' => true]),
@@ -727,10 +733,11 @@ return [
             'label' => 'Articles', 'singular' => 'article', 'model' => \App\Models\Article::class, 'editor' => true,
             'description' => 'Longer pieces: guidance for parents, teacher reflections, student essays, alumni stories.',
             'order' => ['published_at', 'desc'],
-            'slug_from' => 'title',
+            'slug_from' => 'title', 'public_route' => 'articles.show',
             'columns' => [['image', 'Cover', 'image'], ['title', 'Title'], ['author', 'Author'], ['published_at', 'Date', 'date'], ['active', 'Published', 'bool']],
             'fields' => [
                 $f('title', 'Title', 'text', ['translate' => true, 'rules' => 'required|string|max:160']),
+                $slug(),
                 $f('author', 'Author', 'text', ['rules' => 'nullable|string|max:120', 'help' => 'e.g. Mr. Mollel, Head of Science']),
                 $f('category', 'Category', 'text', ['translate' => true, 'rules' => 'nullable|string|max:60', 'help' => 'e.g. Parenting, Science, Student voice']),
                 $f('published_at', 'Publication date', 'date', ['rules' => 'required|date', 'default' => 'today']),
@@ -747,10 +754,11 @@ return [
             'label' => 'Events', 'singular' => 'event', 'model' => \App\Models\Event::class, 'editor' => true,
             'description' => 'Term dates, examinations, parents\' days, sports, ceremonies.',
             'order' => ['starts_at', 'desc'],
-            'slug_from' => 'title',
+            'slug_from' => 'title', 'public_route' => 'events.show',
             'columns' => [['image', 'Cover', 'image'], ['title', 'Event'], ['starts_at', 'Date', 'date'], ['location', 'Venue'], ['active', 'Shown', 'bool']],
             'fields' => [
                 $f('title', 'Event name', 'text', ['translate' => true, 'rules' => 'required|string|max:160']),
+                $slug(),
                 $f('starts_at', 'Start date', 'date', ['rules' => 'required|date', 'default' => 'today']),
                 $f('ends_at', 'End date (optional)', 'date', ['rules' => 'nullable|date|after_or_equal:starts_at']),
                 $f('time', 'Time (optional)', 'text', ['translate' => true, 'rules' => 'nullable|string|max:60', 'help' => 'e.g. 8:00 am – 1:00 pm']),

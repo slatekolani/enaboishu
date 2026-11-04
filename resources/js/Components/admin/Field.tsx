@@ -4,7 +4,8 @@ import RichEditor from './RichEditor';
 export interface FieldDef {
     name: string;
     label: string;
-    type: 'text' | 'textarea' | 'longtext' | 'richtext' | 'gallery' | 'image' | 'file' | 'date' | 'number' | 'select' | 'boolean' | 'url';
+    type: 'text' | 'textarea' | 'longtext' | 'richtext' | 'gallery' | 'image' | 'file' | 'date' | 'number' | 'select' | 'boolean' | 'url' | 'slug';
+    prefix?: string; // slug fields: the address in front of the editable part
     help?: string;
     options?: string[];
     required?: boolean;
@@ -14,6 +15,10 @@ export interface FieldDef {
 
 const base = 'w-full border-slate-300 bg-white px-3 py-2 text-[15px] focus:border-navy-800 focus:ring-navy-800';
 
+/** A web address made from a title: "Form Four Results 2026!" → "form-four-results-2026" (the server tidies it the same way). */
+export const slugify = (text: string) =>
+    text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 160);
+
 interface Props {
     field: FieldDef;
     value: unknown;
@@ -22,9 +27,10 @@ interface Props {
     removed?: boolean;
     onChange: (value: unknown) => void;
     onRemove?: (removed: boolean) => void;
+    source?: string; // slug fields: the title the address is made from
 }
 
-export default function Field({ field, value, error, existing, removed, onChange, onRemove }: Props) {
+export default function Field({ field, value, error, existing, removed, onChange, onRemove, source }: Props) {
     const media = useMedia();
     const id = `f-${field.name}`;
     const str = (value ?? '') as string;
@@ -49,6 +55,36 @@ export default function Field({ field, value, error, existing, removed, onChange
         case 'url':
             control = <input id={id} type="url" value={str} onChange={(e) => onChange(e.target.value)} className={base} placeholder="https://" />;
             break;
+        case 'slug': {
+            const fromTitle = slugify(source ?? '');
+            control = (
+                <>
+                    <div className="flex items-stretch border border-slate-300 bg-white focus-within:border-navy-800 focus-within:ring-1 focus-within:ring-navy-800">
+                        {field.prefix && <span className="hidden max-w-[55%] items-center truncate border-r border-slate-200 bg-slate-50 px-3 text-[14px] text-slate-500 sm:flex" title={field.prefix}>{field.prefix}</span>}
+                        <input
+                            id={id}
+                            value={str}
+                            onChange={(e) => onChange(e.target.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''))}
+                            onBlur={() => onChange(slugify(str))}
+                            placeholder={fromTitle || 'web-address'}
+                            className="min-w-0 flex-1 border-0 px-3 py-2 text-[15px] focus:ring-0"
+                            spellCheck={false}
+                        />
+                        {fromTitle && fromTitle !== str && (
+                            <button type="button" onClick={() => onChange(fromTitle)} className="shrink-0 border-l border-slate-200 px-3 text-[13px] font-medium text-navy-800 hover:bg-slate-50">
+                                Make from title
+                            </button>
+                        )}
+                    </div>
+                    {field.prefix && (str || fromTitle) && (
+                        <p className="mt-1.5 break-all text-[13px] text-slate-600">
+                            Address: <span className="font-medium text-navy-900">{field.prefix}{str || fromTitle}</span>
+                        </p>
+                    )}
+                </>
+            );
+            break;
+        }
         case 'select':
             control = (
                 <select id={id} value={str} onChange={(e) => onChange(e.target.value)} className={base + ' sm:max-w-md'}>

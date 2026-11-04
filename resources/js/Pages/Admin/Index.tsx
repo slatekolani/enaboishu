@@ -11,6 +11,7 @@ export interface Resource {
     description: string | null;
     columns: [string, string, string?][];
     fields: FieldDef[];
+    slug_from?: string | null;
 }
 
 export default function Index({ resource, rows }: { resource: Resource; rows: Record<string, any>[] }) {

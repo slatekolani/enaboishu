@@ -1,7 +1,7 @@
 import { FormEvent, useState } from 'react';
 import { Link, useForm } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
-import Field from '@/Components/admin/Field';
+import Field, { slugify } from '@/Components/admin/Field';
 import GalleryField from '@/Components/admin/GalleryField';
 import type { Resource } from './Index';
 import { plainText } from '@/lib/site';
@@ -31,6 +31,8 @@ export default function Form({ resource, record }: { resource: Resource; record:
     initial.translations = { sw };
 
     const [lang, setLang] = useState<'en' | 'sw'>('en');
+    // A new item's web address follows its title until the editor types an address of their own.
+    const [slugTouched, setSlugTouched] = useState(!!record);
     const { data, setData, post, processing, errors } = useForm(initial);
     const setSw = (name: string, value: string) => setData('translations', { sw: { ...data.translations.sw, [name]: value } });
     const swErrors = Object.keys(errors).some((k) => k.startsWith('translations.'));
@@ -105,8 +107,16 @@ export default function Form({ resource, record }: { resource: Resource; record:
                         error={errors[f.name]}
                         existing={record?.[f.name]}
                         removed={data[`_remove_${f.name}`]}
-                        onChange={(v) => setData(f.name, v)}
+                        onChange={(v) => {
+                            if (f.type === 'slug') setSlugTouched(true);
+                            if (f.name === resource.slug_from && !slugTouched && typeof v === 'string') {
+                                setData((d: Record<string, any>) => ({ ...d, [f.name]: v, slug: slugify(v) }));
+                            } else {
+                                setData(f.name, v);
+                            }
+                        }}
                         onRemove={(r) => setData(`_remove_${f.name}`, r)}
+                        source={f.type === 'slug' && resource.slug_from ? String(data[resource.slug_from] ?? '') : undefined}
                     />
                 ))}
                 </div>

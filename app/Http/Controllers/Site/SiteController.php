@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Site;
 
 use App\Http\Controllers\Controller;
 use App\Models\{Alumnus, Article, Club, CoreValue, Enquiry, Page, StudentLeader, Download, Event, Facility, GalleryItem, Message, Post, Program, Result, Slide, StaffMember, Stat, Testimonial};
+use App\Models\SlugRedirect;
 use App\Support\Meta;
 use App\Jobs\SendSubmissionNotifications;
 use App\Support\Site;
@@ -50,6 +51,16 @@ class SiteController extends Controller
             'published' => $schema['datePublished'] ?? null,
             'modified' => $schema['dateModified'] ?? null,
         ];
+    }
+
+    /** An address that was renamed: send visitors and Google permanently (301) to the new address. */
+    private function moved(string $resource, string $model, string $slug, string $route)
+    {
+        $id = SlugRedirect::recordFor($resource, $slug);
+        $new = $id ? $model::whereKey($id)->value('slug') : null;
+        abort_unless($new && $new !== $slug, 404);
+
+        return redirect()->route($route, ['slug' => $new] + request()->query(), 301);
     }
 
     private function active(string $model, string $order = 'sort')
@@ -154,7 +165,10 @@ class SiteController extends Controller
 
     public function post(string $slug)
     {
-        $post = $this->posts()->where('slug', $slug)->firstOrFail();
+        $post = $this->posts()->where('slug', $slug)->first();
+        if (! $post) {
+            return $this->moved('posts', Post::class, $slug, 'news.show');
+        }
         $local = $post->toArray();
 
         return $this->page('Site/Post', [
@@ -173,7 +187,10 @@ class SiteController extends Controller
 
     public function article(string $slug)
     {
-        $article = $this->articles()->where('slug', $slug)->firstOrFail();
+        $article = $this->articles()->where('slug', $slug)->first();
+        if (! $article) {
+            return $this->moved('articles', Article::class, $slug, 'articles.show');
+        }
         $local = $article->toArray();
 
         return $this->page('Site/Article', [
@@ -196,7 +213,10 @@ class SiteController extends Controller
 
     public function event(string $slug)
     {
-        $event = Event::where('active', true)->where('slug', $slug)->firstOrFail();
+        $event = Event::where('active', true)->where('slug', $slug)->first();
+        if (! $event) {
+            return $this->moved('events', Event::class, $slug, 'events.show');
+        }
         $local = $event->toArray();
 
         return $this->page('Site/Event', [
@@ -215,7 +235,10 @@ class SiteController extends Controller
 
     public function customPage(string $slug)
     {
-        $page = Page::where('active', true)->where('slug', $slug)->firstOrFail();
+        $page = Page::where('active', true)->where('slug', $slug)->first();
+        if (! $page) {
+            return $this->moved('pages', Page::class, $slug, 'pages.show');
+        }
         $local = $page->toArray();
 
         return $this->page('Site/CustomPage', ['page' => $page], $local['seo_title'] ?: $local['title'], $local['seo_description'] ?: ($local['intro'] ?: $local['body']), $page->image,

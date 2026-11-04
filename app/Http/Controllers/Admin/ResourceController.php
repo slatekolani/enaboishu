@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use App\Models\SlugRedirect;
 use App\Support\Audit;
 use App\Support\RichText;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class ResourceController extends Controller
@@ -31,9 +33,14 @@ class ResourceController extends Controller
             'singular' => $r['singular'],
             'description' => $r['description'] ?? null,
             'columns' => $r['columns'],
-            'fields' => collect($r['fields'])->map(function ($f) {
+            'slug_from' => $r['slug_from'] ?? null,
+            'fields' => collect($r['fields'])->map(function ($f) use ($r) {
                 if (($f['default'] ?? null) === 'today') {
                     $f['default'] = now()->toDateString();
+                }
+                // The address in front of the editable part, e.g. https://…/news/
+                if ($f['type'] === 'slug' && isset($r['public_route'])) {
+                    $f['prefix'] = Str::before(route($r['public_route'], ['slug' => '__slug__']), '__slug__');
                 }
 
                 return $f;
@@ -91,7 +98,9 @@ class ResourceController extends Controller
         $record = $r['model']::findOrFail($id);
         // Compare yes/no fields as true/false so unchanged switches are not logged as edits.
         $record->mergeCasts(collect($r['fields'])->where('type', 'boolean')->mapWithKeys(fn ($f) => [$f['name'] => 'boolean'])->all());
+        $oldSlug = $record->slug ?? null;
         $record->update($this->payload($request, $r, $record));
+        $this->rememberOldAddress($r, $record, $oldSlug);
         $changed = array_values(array_diff(array_keys($record->getChanges()), ['updated_at']));
         if ($changed) {
             $labels = collect($r['fields'])->keyBy('name');
@@ -187,20 +196,40 @@ class ResourceController extends Controller
             $data['file_type'] = ! empty($data['file']) ? strtoupper(pathinfo($data['file'], PATHINFO_EXTENSION)) : null;
         }
 
-        // Slugs for articles: generated once from the title, kept stable afterwards.
+        // The web address: what the editor typed (tidied up), or made from the title when left empty.
         if (isset($r['slug_from'])) {
-            $data['slug'] = $record?->slug ?: $this->uniqueSlug($r['model'], $data[$r['slug_from']]);
+            $wanted = Str::slug((string) ($data['slug'] ?? ''));
+            if ($record && ! $request->has('slug')) {
+                $data['slug'] = $record->slug; // not sent at all: keep the current address
+            } elseif ($wanted === '') {
+                $data['slug'] = $this->uniqueSlug($r['model'], (string) $data[$r['slug_from']], $record?->id);
+            } elseif ($r['model']::where('slug', $wanted)->when($record, fn ($q) => $q->whereKeyNot($record->id))->exists()) {
+                throw ValidationException::withMessages(['slug' => 'Another '.$r['singular'].' already uses this web address. Please choose a different one.']);
+            } else {
+                $data['slug'] = $wanted;
+            }
         }
 
         return $data;
     }
 
-    private function uniqueSlug(string $model, string $title): string
+    /** When an address changes, the old one keeps working: it redirects to the new address. */
+    private function rememberOldAddress(array $r, $record, ?string $oldSlug): void
+    {
+        if (! isset($r['slug_from']) || ! $oldSlug || $oldSlug === $record->slug) {
+            return;
+        }
+        SlugRedirect::updateOrCreate(['resource' => $r['key'], 'old_slug' => $oldSlug], ['record_id' => $record->id]);
+        // The new address is a real page again, so it must not redirect anywhere.
+        SlugRedirect::where('resource', $r['key'])->where('old_slug', $record->slug)->delete();
+    }
+
+    private function uniqueSlug(string $model, string $title, ?int $ignoreId = null): string
     {
         $base = Str::slug($title) ?: 'post';
         $slug = $base;
         $i = 2;
-        while ($model::where('slug', $slug)->exists()) {
+        while ($model::where('slug', $slug)->when($ignoreId, fn ($q) => $q->whereKeyNot($ignoreId))->exists()) {
             $slug = $base.'-'.$i++;
         }
 
